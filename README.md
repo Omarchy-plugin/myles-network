@@ -91,6 +91,18 @@ omarchy plugin enable omarchy.network   # if you want the built-in back
 
 omarchy plugin remove myles.network --yes
 
+## Installing the whole suite
+
+Every plugin in the suite installs with one command, and updates itself
+automatically:
+
+```bash
+git clone https://github.com/Omarchy-plugin/myles-omarchy-plugins.git
+cd myles-omarchy-plugins && ./install.sh
+```
+
+See [myles-omarchy-plugins](../myles-omarchy-plugins) for the update mechanism.
+
 ## Credits
 
 - Omarchy — <https://omarchy.org> — MIT, © David Heinemeier Hansson. `omarchy.network` is the base this is forked from.
