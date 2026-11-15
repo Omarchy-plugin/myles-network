@@ -19,6 +19,8 @@ Proton VPN control.
 - Host details: resolved DNS, IPv6, public address, firewall posture, Tailscale state.
 - Throughput and latency sparkline history.
 - Proton VPN connect/disconnect with an optional preferred country.
+- Myles hotspot status and on/off control, with one-time setup guidance for a
+  separate AP interface so the PC can keep its Wi-Fi client connection.
 - Profile backup and restore to a portable JSON file.
 
 ## Shell scripts
@@ -29,6 +31,7 @@ Proton VPN control.
 | `net-link.sh` | Link statistics, speed, duplex, counters |
 | `net-profiles.sh` | Enumerate and order saved profiles |
 | `net-extras.sh` | DNS, IPv6, public IP, firewall posture, Tailscale state |
+| `net-hotspot-status.sh` | Read the saved Myles AP profile and secondary interface state |
 | `proton-install.sh`, `proton-signin.sh` | Proton VPN CLI install and sign-in helpers |
 
 ## Network calls
@@ -51,6 +54,10 @@ only. It deliberately does **not** carry NetworkManager profiles or Wi-Fi passwo
 import, Wi-Fi shortcuts match by **SSID** and wired shortcuts by **profile name** when a
 matching UUID is not present — so create the local NetworkManager profile first, then
 import.
+
+For concurrent Wi-Fi client and hotspot use, the panel can copy a one-time command that
+creates `ap0` and binds the saved `Myles` profile to it. The panel starts and stops that
+AP profile on `ap0`; it never joins the hotspot as a client.
 
 ## Privilege boundary
 

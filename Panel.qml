@@ -84,6 +84,23 @@ Panel {
   property var wifiNetworks: []
   property bool scanning: false
   property bool wifiStationAvailable: false
+  property string hotspotUuid: ""
+  property string hotspotProfileInterface: ""
+  property bool hotspotInterfaceExists: false
+  property bool hotspotActive: false
+  property bool hotspotBusy: false
+  property string hotspotError: ""
+  property string hotspotStatusText: "Checking hotspot…"
+  readonly property bool hotspotCanStart: hotspotUuid !== ""
+    && hotspotProfileInterface === "ap0" && hotspotInterfaceExists
+  readonly property bool hotspotCanToggle: hotspotActive || hotspotCanStart
+  readonly property bool hotspotNeedsSetup: hotspotUuid !== "" && !hotspotCanStart
+  readonly property string hotspotSetupCommand: {
+    var iface = wifiDevice && wifiDevice.name ? String(wifiDevice.name) : ""
+    if (!/^[A-Za-z0-9_.:-]{1,15}$/.test(iface)) return ""
+    return "(iw dev ap0 info >/dev/null 2>&1 || sudo iw dev " + iface + " interface add ap0 type __ap)"
+      + " && nmcli connection modify Myles connection.interface-name ap0 connection.autoconnect no"
+  }
   property string dnsProvider: ""
   property string pendingDnsProvider: ""
   // Wi-Fi band state from `omarchy-network-band`. `bandCurrent` is the band
@@ -415,6 +432,48 @@ Panel {
     Qt.callLater(function() { root.refresh(true) })
   }
 
+  function refreshHotspot() {
+    if (!hotspotStatusProc.running) hotspotStatusProc.running = true
+  }
+
+  function toggleHotspot() {
+    if (!hotspotCanToggle || hotspotBusy || nmProc.running) return
+
+    var starting = !hotspotActive
+    hotspotBusy = true
+    hotspotError = ""
+    hotspotStatusText = starting ? "Starting Myles…" : "Stopping Myles…"
+    runNm(
+      starting ? "Starting Myles hotspot" : "Stopping Myles hotspot",
+      starting
+        ? ["nmcli", "--wait", "30", "connection", "up", "uuid", hotspotUuid, "ifname", "ap0"]
+        : ["nmcli", "--wait", "15", "connection", "down", "uuid", hotspotUuid],
+      function(ok, details) {
+        root.hotspotBusy = false
+        root.hotspotError = ok ? "" : root.nmErrorText(details)
+        root.refreshHotspot()
+      })
+  }
+
+  function updateHotspotStatus(raw, exitCode) {
+    var state = Model.parseHotspotStatus(raw, exitCode, "ap0")
+    hotspotUuid = state.uuid
+    hotspotProfileInterface = state.interfaceName
+    hotspotInterfaceExists = state.interfaceExists
+    hotspotActive = state.active
+
+    if (state.reason === "wrong-mode")
+      hotspotStatusText = "Myles profile is not an access point"
+    else if (state.reason === "unavailable")
+      hotspotStatusText = "Myles hotspot profile not found"
+    else if (state.reason === "malformed")
+      hotspotStatusText = "Could not read Myles hotspot status"
+    else if (state.needsSetup)
+      hotspotStatusText = hotspotActive ? "On · using the PC Wi-Fi interface" : "Setup needed to keep the PC on Wi-Fi"
+    else
+      hotspotStatusText = hotspotActive ? "On · Myles" : "Off · Myles"
+  }
+
   function updateVpn(raw, errRaw) {
     var combined = String(raw || "") + "\n" + String(errRaw || "")
     if (Model.protonAuthRequired(combined)) {
@@ -653,6 +712,7 @@ Panel {
       // their poll timers' first tick.
       refreshProfiles()
       refreshScanDetail()
+      refreshHotspot()
       selectedIndex = wifiNetworks.length > 0 ? 0 : -1
       wifiActionFocused = false
       focusSection = hasCaptivePortal ? "portal" : (wifiNetworks.length > 0 ? "wifi" : "dns")
@@ -2510,6 +2570,15 @@ Panel {
     }
   }
 
+  Process {
+    id: hotspotStatusProc
+    command: root.probe("net-hotspot-status.sh")
+    stdout: StdioCollector { id: hotspotStatusStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.updateHotspotStatus(hotspotStatusStdout.text, exitCode)
+    }
+  }
+
   Timer {
     id: scanRestart
     interval: 100
@@ -2793,6 +2862,15 @@ Panel {
     running: root.opened
     triggeredOnStart: true
     onTriggered: if (!profilesProc.running) root.refreshProfiles()
+  }
+
+  Timer {
+    id: hotspotStatusPoll
+    interval: 5000
+    repeat: true
+    running: root.opened
+    triggeredOnStart: true
+    onTriggered: root.refreshHotspot()
   }
 
   Timer {
@@ -3169,6 +3247,76 @@ Panel {
 
         PanelSeparator {
           foreground: root.bar.foreground
+        }
+
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+
+          RowLayout {
+            width: parent.width
+            spacing: Style.space(10)
+
+            Column {
+              Layout.fillWidth: true
+              spacing: Style.space(2)
+
+              Text {
+                textFormat: Text.PlainText
+                text: "Myles hotspot"
+                color: root.bar.foreground
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 1.2
+              }
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: root.hotspotError !== "" ? root.hotspotError : root.hotspotStatusText
+                color: root.hotspotError !== "" ? root.bar.urgent : Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+              }
+            }
+
+            ToggleSwitch {
+              id: hotspotSectionSwitch
+              Accessible.name: "Myles hotspot"
+              Accessible.description: root.hotspotActive ? "Turn the Myles hotspot off" : "Turn the Myles hotspot on"
+              checked: root.hotspotActive
+              enabled: !root.hotspotBusy && !root.nmProc.running && root.hotspotCanToggle
+              foreground: root.bar.foreground
+              Layout.alignment: Qt.AlignVCenter
+              onToggled: root.toggleHotspot()
+
+              PanelToolTip {
+                visible: hotspotSectionSwitch.containsMouse
+                text: root.hotspotActive ? "Turn Myles off" : "Turn Myles on"
+                fontFamily: root.bar.fontFamily
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: root.hotspotNeedsSetup
+            textFormat: Text.PlainText
+            text: "One-time setup puts the hotspot on a separate AP interface so this PC can stay connected to Wi-Fi."
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          ActionChip {
+            visible: root.hotspotNeedsSetup && root.hotspotSetupCommand !== ""
+            actionText: "Copy setup command"
+            tooltipText: "Copies the one-time AP interface setup command for Terminal"
+            onClicked: root.copyToClipboard(root.hotspotSetupCommand)
+          }
         }
 
         // Proton VPN: simple on/off after a one-time sign-in.
