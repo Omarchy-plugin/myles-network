@@ -432,6 +432,23 @@ eq("public ip failed exit", M.publicIpState("203.0.113.9", 7).ok, false);
 eq("public ip html body", M.publicIpState("<html>error</html>", 0).ok, false);
 eq("public ip empty", M.publicIpState("", 0).ok, false);
 
+const hotspotReady = M.parseHotspotStatus("hotspot-uuid\tap0\t1\t0\n", 0, "ap0");
+eq("hotspot configured on ap interface", hotspotReady.canStart, true);
+eq("hotspot configured but inactive", hotspotReady.active, false);
+eq("hotspot configured and inactive remains toggleable", hotspotReady.canToggle, true);
+eq("hotspot ready does not need setup", hotspotReady.needsSetup, false);
+const hotspotActive = M.parseHotspotStatus("hotspot-uuid\tap0\t1\t1\n", 0, "ap0");
+eq("hotspot active can toggle off", hotspotActive.canToggle, true);
+eq("hotspot active", hotspotActive.active, true);
+const hotspotNeedsSetup = M.parseHotspotStatus("hotspot-uuid\twlp1s0\t0\t0\n", 0, "ap0");
+eq("hotspot needs separate interface", hotspotNeedsSetup.needsSetup, true);
+eq("hotspot cannot start on station interface", hotspotNeedsSetup.canStart, false);
+const hotspotOldActive = M.parseHotspotStatus("hotspot-uuid\twlp1s0\t0\t1\n", 0, "ap0");
+eq("legacy active hotspot can still be stopped", hotspotOldActive.canToggle, true);
+eq("missing hotspot profile", M.parseHotspotStatus("", 1, "ap0").reason, "unavailable");
+eq("non-AP profile rejected", M.parseHotspotStatus("", 2, "ap0").reason, "wrong-mode");
+eq("malformed hotspot status rejected", M.parseHotspotStatus("bad\trow", 0, "ap0").reason, "malformed");
+
 // The window keeps the last N samples, so a full series shifts its oldest out
 // and the newest stays at the end.
 eq("rate series appends", M.rateSeries([], 1, 2, 4).length, 1);

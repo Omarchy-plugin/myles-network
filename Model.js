@@ -1071,6 +1071,56 @@ function publicIpState(raw, exitCode) {
   return { ok: true, address: text }
 }
 
+// The panel can start the AP only when its saved profile is pinned to the
+// secondary AP interface. An active profile on the station interface remains
+// stoppable so the user can restore the PC's Wi-Fi connection.
+function parseHotspotStatus(raw, exitCode, apInterface) {
+  var iface = String(apInterface || "ap0")
+  var empty = {
+    found: false,
+    modeValid: false,
+    uuid: "",
+    interfaceName: "",
+    interfaceExists: false,
+    active: false,
+    canStart: false,
+    canToggle: false,
+    needsSetup: false,
+    reason: "unavailable"
+  }
+
+  if (exitCode !== 0) {
+    if (exitCode === 2) {
+      empty.found = true
+      empty.reason = "wrong-mode"
+    }
+    return empty
+  }
+
+  var fields = String(raw || "").replace(/\r?\n+$/, "").split("\t")
+  if (fields.length !== 4 || !fields[0]) {
+    empty.reason = "malformed"
+    return empty
+  }
+
+  var profileInterface = fields[1] === "--" ? "" : fields[1]
+  var interfaceExists = fields[2] === "1"
+  var active = fields[3] === "1"
+  var ready = profileInterface === iface && interfaceExists
+  return {
+    found: true,
+    modeValid: true,
+    uuid: fields[0],
+    interfaceName: profileInterface,
+    interfaceExists: interfaceExists,
+    active: active,
+    canStart: ready,
+    canToggle: active || ready,
+    needsSetup: !ready,
+    reason: ""
+  }
+}
+
 // Rate history for the throughput sparkline. The panel already computes
 // instantaneous rates from consecutive byte counters; this keeps the last N of
 // them so the same numbers can be drawn as a shape.
@@ -1128,6 +1178,7 @@ if (typeof module !== "undefined") {
     parseProtonAccount: parseProtonAccount,
     protonAuthRequired: protonAuthRequired,
     unescapeField: unescapeField,
+    parseHotspotStatus: parseHotspotStatus,
     parseRecords: parseRecords,
     parseProfiles: parseProfiles,
     sortProfiles: sortProfiles,
