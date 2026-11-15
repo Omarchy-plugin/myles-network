@@ -435,6 +435,7 @@ eq("public ip empty", M.publicIpState("", 0).ok, false);
 const hotspotReady = M.parseHotspotStatus("hotspot-uuid\tap0\t1\t0\n", 0, "ap0");
 eq("hotspot configured on ap interface", hotspotReady.canStart, true);
 eq("hotspot configured but inactive", hotspotReady.active, false);
+eq("hotspot configured and inactive remains toggleable", hotspotReady.canToggle, true);
 eq("hotspot ready does not need setup", hotspotReady.needsSetup, false);
 const hotspotActive = M.parseHotspotStatus("hotspot-uuid\tap0\t1\t1\n", 0, "ap0");
 eq("hotspot active can toggle off", hotspotActive.canToggle, true);

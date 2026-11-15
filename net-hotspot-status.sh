@@ -12,7 +12,7 @@ mode="$(nmcli -g 802-11-wireless.mode connection show uuid "$profile_uuid" 2>/de
 
 profile_interface="$(nmcli -g connection.interface-name connection show uuid "$profile_uuid" 2>/dev/null)" || exit 1
 device_exists=0
-if nmcli -g DEVICE device status 2>/dev/null | grep -Fxq "$ap_interface"; then
+if ip link show dev "$ap_interface" >/dev/null 2>&1; then
   device_exists=1
 fi
 
